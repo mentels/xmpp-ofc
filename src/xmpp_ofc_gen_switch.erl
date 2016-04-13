@@ -151,6 +151,8 @@ open_connection(DatapathId, EnabledMods) ->
                   }
           end, {[], []}, EnabledMods),
     subscribe(DatapathId, lists:usort(MsgTypesToSubscribe)),
+    {ok, _, _, FM} = xmpp_ofc_ids:start_link(DatapathId),
+    of_send(DatapathId, [FM]),
     lists:reverse(ModsCfg).
 
 terminate_connection(DatapathId, ModsConfig) ->
