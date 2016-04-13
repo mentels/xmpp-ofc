@@ -152,7 +152,8 @@ packet_out(Xid, PacketIn, OutPort) ->
     {InPort, BufferIdOrPacketPortion} =
         case packet_in_extract(buffer_id, PacketIn) of
             no_buffer ->
-                packet_in_extract([in_port, data], PacketIn);
+                list_to_tuple(packet_in_extract([in_port, data],
+                                                PacketIn));
             BufferId when is_integer(BufferId) ->
                 {packet_in_extract(in_port, PacketIn), BufferId}
         end,
