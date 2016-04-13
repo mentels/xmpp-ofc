@@ -71,7 +71,7 @@ handle_call({handle_message, {packet_in, _, MsgBody} = Msg, CurrOFMesssages},
             _From, #state{datapath_id = Dpid,
                           fwd_table = FwdTable0} = State) ->
     case packet_in_extract(reason, MsgBody) of
-        no_match ->
+        action ->
             {OFMessages, FwdTable1} = handle_packet_in(Msg, Dpid, FwdTable0),
             {reply, OFMessages ++ CurrOFMesssages,
              State#state{fwd_table = FwdTable1}};
