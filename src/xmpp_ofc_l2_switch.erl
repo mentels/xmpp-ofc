@@ -67,12 +67,17 @@ init([DatapathId]) ->
     {ok, #state{datapath_id = DatapathId, fwd_table = #{}}}.
 
 
-handle_call({handle_message, {packet_in, _, _} = Msg, CurrOFMesssages},
+handle_call({handle_message, {packet_in, _, MsgBody} = Msg, CurrOFMesssages},
             _From, #state{datapath_id = Dpid,
                           fwd_table = FwdTable0} = State) ->
-    {OFMessages, FwdTable1} = handle_packet_in(Msg, Dpid, FwdTable0),
-    {reply, OFMessages ++ CurrOFMesssages,
-     State#state{fwd_table = FwdTable1}}.
+    case packet_in_extract([reason], MsgBody) of
+        no_math ->
+            {OFMessages, FwdTable1} = handle_packet_in(Msg, Dpid, FwdTable0),
+            {reply, OFMessages ++ CurrOFMesssages,
+             State#state{fwd_table = FwdTable1}};
+        _ ->
+            {reply, CurrOFMesssages, State}
+    end.
 
 
 handle_cast(_Request, State) ->
@@ -177,7 +182,9 @@ packet_in_extract(in_port, PacketIn) ->
 packet_in_extract(buffer_id, PacketIn) ->
     proplists:get_value(buffer_id, PacketIn);
 packet_in_extract(data, PacketIn) ->
-    proplists:get_value(data, PacketIn).
+    proplists:get_value(data, PacketIn);
+packet_in_extract(reason, PacketIn) ->
+    proplists:get_value(reason, PacketIn).
 
 format_mac(MacBin) ->
     Mac0 = [":" ++ integer_to_list(X, 16) || <<X>> <= MacBin],

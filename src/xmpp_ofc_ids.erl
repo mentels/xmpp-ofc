@@ -67,12 +67,17 @@ init([DatapathId]) ->
     {ok, #state{datapath_id = DatapathId, fwd_table = #{}}}.
 
 
-handle_call({handle_message, {packet_in, _, _} = Msg, CurrOFMesssages},
+handle_call({handle_message, {packet_in, _, MsgBody} = Msg, CurrOFMesssages},
             _From, #state{datapath_id = Dpid,
                           fwd_table = FwdTable0} = State) ->
-    {OFMessages, FwdTable1} = handle_packet_in(Msg, Dpid, FwdTable0),
-    {reply, OFMessages ++ CurrOFMesssages,
-     State#state{fwd_table = FwdTable1}}.
+    case packet_in_extract([reason], MsgBody) of
+        action ->
+            {OFMessages, FwdTable1} = handle_packet_in(Msg, Dpid, FwdTable0),
+            {reply, OFMessages ++ CurrOFMesssages,
+             State#state{fwd_table = FwdTable1}};
+        _ ->
+            {reply, CurrOFMesssages, State}
+    end.
 
 
 handle_cast(_Request, State) ->
@@ -112,49 +117,21 @@ init_flow_mod() ->
     of_msg_lib:flow_add(?OF_VER, Matches, Instructions, FlowOpts).    
 
 handle_packet_in({_, Xid, PacketIn}, DatapathId, FwdTable0) ->
-    FwdTable1  = learn_src_mac_to_port(PacketIn, DatapathId, FwdTable0),
-    case get_port_for_dst_mac(PacketIn, FwdTable0) of
-        undefined ->
-            {[packet_out(Xid, PacketIn, flood)], FwdTable1};
-        PortNo ->
-            {[flow_to_dst_mac(PacketIn, PortNo),
-              packet_out(Xid, PacketIn, PortNo)],
-             FwdTable1}
-    end.
-
-learn_src_mac_to_port(PacketIn, Dpid, FwdTable0) ->
-    [InPort, SrcMac] = packet_in_extract([in_port, src_mac], PacketIn),
-    case maps:get(SrcMac, FwdTable0, undefined) of
-        InPort ->
-            FwdTable0;
-        _ ->
-            FwdTable1 = maps:put(SrcMac, InPort, FwdTable0),
-            schedule_remove_entry(Dpid, SrcMac),
-            lager:debug("Added forwarding entry in ~p: ~p => ~p",
-                        [Dpid, format_mac(SrcMac), InPort]),
-            FwdTable1
-    end.
-
-
-get_port_for_dst_mac(PacketIn, FwdTable) ->
-    DstMac = packet_in_extract(dst_mac, PacketIn),
-    case maps:find(DstMac, FwdTable) of
-        error ->
-            undefined;
-        {ok, Port} ->
-            Port
-    end.
-
-flow_to_dst_mac(PacketIn, OutPort) ->
-    [InPort, DstMac] = packet_in_extract([in_port, dst_mac], PacketIn),
-    Matches = [{in_port, InPort}, {eth_dst, DstMac}],
-    Instructions = [{apply_actions, [{output, OutPort, no_buffer}]}],
-    FlowOpts = [{table_id, 0}, {priority, 100},
+    [IpSrc, TCPSrc] = packet_in_extract([ip_src, tcp_src], PacketIn),
+    Matches = [{eth_type, 16#0800},
+               {ip_src, IpSrc},
+               {ip_proto, <<6>>},
+               {tcp_src, TCPSrc},
+               {tcp_dst, <<5222:16>>}],
+    Instructions = [{apply_actions, [{output, 1, no_buffer}]}],
+    FlowOpts = [{table_id, 0}, {priority, 150},
                 {idle_timeout, ?FM_TIMEOUT_S(idle)},
                 {idle_timeout, ?FM_TIMEOUT_S(hard)},
-                {cookie, <<0,0,0,0,0,0,0,10>>},
+                {cookie, <<0,0,0,0,0,0,0,200>>},
                 {cookie_mask, <<0,0,0,0,0,0,0,0>>}],
-    of_msg_lib:flow_add(?OF_VER, Matches, Instructions, FlowOpts).
+    FM = of_msg_lib:flow_add(?OF_VER, Matches, Instructions, FlowOpts),
+    PO = packet_out(Xid, PacketIn, 1),
+    {[FM, PO], FwdTable0}.
 
 
 packet_out(Xid, PacketIn, OutPort) ->
@@ -180,13 +157,18 @@ packet_in_extract(src_mac, PacketIn) ->
 packet_in_extract(dst_mac, PacketIn) ->
     <<DstMac:6/bytes, _/binary>> = proplists:get_value(data, PacketIn),
     DstMac;
+packet_in_extract(dst_mac, PacketIn) ->
+    <<DstMac:6/bytes, _/binary>> = proplists:get_value(data, PacketIn),
+    DstMac;
 packet_in_extract(in_port, PacketIn) ->
     <<InPort:32>> = proplists:get_value(in_port, proplists:get_value(match, PacketIn)),
     InPort;
 packet_in_extract(buffer_id, PacketIn) ->
     proplists:get_value(buffer_id, PacketIn);
 packet_in_extract(data, PacketIn) ->
-    proplists:get_value(data, PacketIn).
+    proplists:get_value(data, PacketIn);
+packet_in_extract(reason, PacketIn) ->
+    proplists:get_value(reason, PacketIn).
 
 format_mac(MacBin) ->
     Mac0 = [":" ++ integer_to_list(X, 16) || <<X>> <= MacBin],
