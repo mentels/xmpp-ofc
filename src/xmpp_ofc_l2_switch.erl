@@ -45,7 +45,7 @@
 -spec start_link(binary()) -> {ok, pid()} | ignore | {error, term()}.
 start_link(DatapathId) ->
     {ok, Pid} = gen_server:start_link(?MODULE, [DatapathId], []),
-    {ok, Pid, subscriptions(), init_flow_mod()}.
+    {ok, Pid, subscriptions(), [init_flow_mod()]}.
 
 -spec stop(pid()) -> ok.
 stop(Pid) ->
