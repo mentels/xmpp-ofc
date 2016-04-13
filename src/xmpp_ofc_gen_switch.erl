@@ -31,7 +31,7 @@
 -type state() :: #state{}.
 
 -define(SERVER, ?MODULE).
--define(DEFAULT_MODULES, [xmpp_ofc_l2_switch]).
+-define(DEFAULT_MODULES, [xmpp_ofc_l2_switch, xmpp_ofc_ids]).
 -define(EXO_SWITCHES_CNT, [counters, switches]).
 -define(EXO_OF_MESSAGES_RECEIVED, [counters, of_messages_received]).
 -define(EXO_OF_MESSAGES_SENT, [counters, of_messages_sent]).
@@ -141,18 +141,19 @@ init_exometer_graphite_metrics(
 
 open_connection(DatapathId, EnabledMods) ->
     exometer:update(?EXO_SWITCHES_CNT, 1),
-    {ModsCfg, MsgTypesToSubscribe} =
+    {ModsCfg, MsgTypesToSubscribe, InitOFMessages} =
         lists:foldl(
-          fun(Mod, {ModsCfgAcc, MsgTypesAcc}) ->
-                  {ok, Pid, MsgTypes} = Mod:start_link(DatapathId),
+          fun(Mod, {ModsCfgAcc, MsgTypesAcc, OFMessagesAcc}) ->
+                  {ok, Pid, MsgTypes, InitOFMessages} =
+                      Mod:start_link(DatapathId),
                   {
                     [{Mod, Pid, MsgTypes} | ModsCfgAcc],
-                    MsgTypes ++ MsgTypesAcc
+                    MsgTypes ++ MsgTypesAcc,
+                    InitOFMessages ++ OFMessagesAcc
                   }
-          end, {[], []}, EnabledMods),
+          end, {[], [], []}, EnabledMods),
     subscribe(DatapathId, lists:usort(MsgTypesToSubscribe)),
-    {ok, _, _, FM} = xmpp_ofc_ids:start_link(DatapathId),
-    of_send(DatapathId, [FM]),
+    of_send(DatapathId, InitOFMessages),
     lists:reverse(ModsCfg).
 
 terminate_connection(DatapathId, ModsConfig) ->

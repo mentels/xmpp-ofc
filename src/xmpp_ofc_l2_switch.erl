@@ -45,7 +45,7 @@
 -spec start_link(binary()) -> {ok, pid()} | ignore | {error, term()}.
 start_link(DatapathId) ->
     {ok, Pid} = gen_server:start_link(?MODULE, [DatapathId], []),
-    {ok, Pid, subscriptions()}.
+    {ok, Pid, subscriptions(), init_flow_mod()}.
 
 -spec stop(pid()) -> ok.
 stop(Pid) ->
@@ -105,6 +105,17 @@ code_change(_OldVsn, State, _Extra) ->
 
 subscriptions() ->
     [packet_in].
+
+init_flow_mod() ->
+    Matches = [],
+    Instructions = [{apply_actions, [{output, controller, no_buffer}]}],
+    FlowOpts = [{table_id, 0}, {priority, 10},
+                {idle_timeout, 0},
+                {idle_timeout, 0},
+                {cookie, <<0,0,0,0,0,0,0,1>>},
+                {cookie_mask, <<0,0,0,0,0,0,0,0>>}],
+    of_msg_lib:flow_add(?OF_VER, Matches, Instructions, FlowOpts).
+
 
 handle_packet_in({_, Xid, PacketIn}, DatapathId, FwdTable0) ->
     FwdTable1  = learn_src_mac_to_port(PacketIn, DatapathId, FwdTable0),
