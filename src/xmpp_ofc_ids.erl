@@ -102,7 +102,7 @@ subscriptions() ->
     [packet_in].
 
 init_flow_mod() ->
-    Matches = [{eth_type, 16#0800}, {ip_proto, 8}, {tcp_dst, 5222}],
+    Matches = [{eth_type, 16#0800}, {ip_proto, <<6>>}, {tcp_dst, <<5222:16>>}],
     Instructions = [{apply_actions, [{output, controller, no_buffer}]}],
     FlowOpts = [{table_id, 0}, {priority, 150},
                 {idle_timeout, ?FM_TIMEOUT_S(idle)},
