@@ -273,7 +273,11 @@ packet_in_extract(data, PacketIn) ->
 packet_in_extract(reason, PacketIn) ->
     proplists:get_value(reason, PacketIn);
 packet_in_extract(cookie, PacketIn) ->
-    proplists:get_value(cookie, PacketIn).
+    proplists:get_value(cookie, PacketIn);
+packet_in_extract(ipv4_src, PacketIn) ->
+    proplists:get_value(ipv4_src, PacketIn);
+packet_in_extract(tcp_src, PacketIn) ->
+    proplists:get_value(tcp_src, PacketIn).
 
 
 flow_stats_extract(Elements, FlowStats) when is_list(Elements) ->
